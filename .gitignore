@@ -1,0 +1,12 @@
+.pixi/
+__pycache__/
+*.pyc
+.DS_Store
+runs/
+# Local installation and execution state
+.env
+.env.*
+!.env.example
+model.json
+.op-composition.json
+var/

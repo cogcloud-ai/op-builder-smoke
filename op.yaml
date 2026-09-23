@@ -1,0 +1,98 @@
+schema: openteams/op-manifest [0.1]
+id: openteams/op-builder-smoke
+version: 0.1.0
+name: Builder execution smoke check
+description: Model-free verification of shared Op execution and mapped Cog handoffs. This
+  is not the cog-builder workflow. The second merge deliberately treats the first findings
+  as a single new detector answer; original provenance remains in the first output.
+inputs:
+- name: bundle
+  description: Synthetic detector bundle
+  required: true
+  default:
+    kind: dependency
+    batches:
+    - batch_id: b1
+      item_ids:
+      - A
+      - B
+      cuts:
+      - item_id: A
+        field: body
+        mid_sentence: true
+    results:
+    - - abstained: false
+        findings:
+        - finding_id: d1
+          blocking_item_id: A
+          blocked_item_id: B
+          basis: stated
+          citation: B needs A
+          inference_rationale: null
+      - abstained: false
+        findings:
+        - finding_id: d2
+          blocking_item_id: A
+          blocked_item_id: B
+          basis: inferred
+          citation: null
+          inference_rationale: A supplies the prerequisite
+  schema:
+    type: object
+steps:
+- id: merge
+  name: Merge synthetic detector repeats
+  cog:
+    id: openteams/cog-merge-findings-candidate
+    version: 0.1.0
+    source: ../cog-merge-findings-candidate
+    task: run
+  input:
+    $from: inputs.bundle
+  expected_outcome: Findings and provenance with a passing envelope Gate.
+  gate:
+    policy: envelope-ok-no-error-problems
+    guards: []
+  on_fail: stop
+- id: handoff
+  name: Exercise the mapped Cog handoff
+  depends_on:
+  - merge
+  cog:
+    id: openteams/cog-merge-findings-candidate
+    version: 0.1.0
+    source: ../cog-merge-findings-candidate
+    task: run
+  input:
+    kind:
+      $from: inputs.bundle.kind
+    batches:
+    - batch_id: handoff
+      item_ids:
+      - A
+      - B
+    results:
+    - - abstained:
+          $from: steps.merge.payload.abstained
+        findings:
+          $from: steps.merge.payload.findings
+  expected_outcome: Same synthetic relationship after a schema-shaped handoff; provenance
+    now describes the new single input.
+  gate:
+    policy: envelope-ok-no-error-problems
+    guards: []
+  on_fail: stop
+outputs:
+  original_merge:
+    $from: steps.merge.payload
+  handoff_merge:
+    $from: steps.handoff.payload
+track:
+  records:
+  - input_request
+  - step_requests
+  - cog_envelopes
+  - contract_check_problems
+  - gate_decisions
+  - model_bindings
+  - output_artifacts
