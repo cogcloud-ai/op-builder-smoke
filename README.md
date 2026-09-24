@@ -81,7 +81,7 @@ that honestly as an empty list.
 
 Edit `op.yaml`, then `pixi run test`. Adding a step means adding a Cog and
 declaring it; the runner never grows per-Op behaviour. See
-`cog-smith/BUILDING_OPS.md`.
+[cog-smith's BUILDING_OPS.md](https://github.com/cogcloud-ai/cog-smith/blob/main/BUILDING_OPS.md).
 
 ## License
 
