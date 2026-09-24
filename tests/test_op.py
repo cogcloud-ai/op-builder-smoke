@@ -24,7 +24,7 @@ class SpecTests(unittest.TestCase):
 
     def test_identity(self):
         self.assertEqual(self.spec.id, "openteams/op-builder-smoke")
-        self.assertEqual(self.spec.version, "0.1.0")
+        self.assertEqual(self.spec.version, "0.2.0")
 
     def test_every_step_names_a_cog_usage_task(self):
         for step in self.spec.steps:

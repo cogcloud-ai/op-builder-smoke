@@ -1,8 +1,8 @@
 [workspace]
 license = "Apache-2.0"
 name = "op-builder-smoke"
-version = "0.1.0"
-description = "Model-free verification of shared Op execution and mapped Cog handoffs. This is not the cog-builder workflow. The second merge deliberately treats the first findings as a single new detector answer; original provenance remains in the first output."
+version = "0.2.0"
+description = "Model-free verification of shared Op execution and mapped Cog handoffs using a Cog the builder itself produced. This is not the cog-builder workflow. The second tally receives the first tally's counts as its prior counts, so the handoff is a real data dependency between two invocations of one code Cog."
 channels = ["conda-forge"]
 platforms = ["osx-arm64", "linux-64"]
 

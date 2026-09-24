@@ -1,7 +1,7 @@
-"""Model-free integration checks against the installed merge candidate.
+"""Model-free integration checks against the installed cog-word-tally package.
 
 Only the resume test injects a transport failure; successful calls use the real
-declared Cog task. Tests require Pixi and the sibling candidate checkout.
+declared Cog task. Tests require Pixi and the sibling cog-word-tally checkout.
 """
 import json
 from pathlib import Path
@@ -30,30 +30,57 @@ class ExecutionTests(unittest.TestCase):
         code, output = self.run_op()
         self.assertEqual(code, 0, output)
         self.assertEqual(output['status'], 'completed')
-        values = output['outputs']
-        self.assertEqual(values['original_merge']['findings'], values['handoff_merge']['findings'])
-        self.assertEqual(values['original_merge']['provenance'][0]['of'], 2)
-        self.assertEqual(values['handoff_merge']['provenance'][0]['of'], 1)
+        first = output['outputs']['first_tally']
+        accumulated = output['outputs']['accumulated_tally']
+        # the first tally is what the example texts contain
+        self.assertEqual(first['counts']['the'], 3)
+        self.assertEqual(first['counts']["don't"], 1)
+        self.assertEqual(first['total_words'], sum(first['counts'].values()))
+        # the handoff was a real data dependency: every first count is
+        # preserved, the second texts are added on top, and the total is the sum
+        for word, count in first['counts'].items():
+            self.assertGreaterEqual(accumulated['counts'][word], count)
+        self.assertEqual(accumulated['counts']['the'], 5)
+        self.assertEqual(accumulated['counts']['42'], 1)
+        self.assertEqual(accumulated['total_words'],
+                         first['total_words'] + 10)
+        self.assertEqual(accumulated['authority_use'], [])
         track = json.loads(Path(output['track']).read_text())
         self.assertEqual([s['status'] for s in track['steps']], ['passed', 'passed'])
         for step in track['steps']:
             self.assertEqual(len(step['cog_sha256']), 64)
             self.assertTrue(Path(step['request']).is_file())
             env = json.loads(Path(step['envelope']).read_text())
-            self.assertEqual(env['cog']['id'], 'openteams/cog-merge-findings-candidate')
+            self.assertEqual(env['cog']['id'], 'openteams/cog-word-tally')
             self.assertEqual(step['gate']['status'], 'pass')
+        handoff = json.loads(Path(track['steps'][1]['request']).read_text())
+        self.assertEqual(handoff['prior_counts'], first['counts'])
 
     def test_real_contract_problem_stops_downstream(self):
+        # The Op's own input schema refuses an empty texts list before any
+        # Cog runs; the Cog's CONTRACT is exercised by handing the second
+        # step a prior count it must refuse (negative), which no Op-level
+        # schema sees because prior_counts is mapped from the first result.
         request = json.loads(self.request.read_text())
-        request['bundle']['results'] = [[{}]]
+        request['first_texts'] = []
         path = Path(self.temp.name) / 'bad.json'
         path.write_text(json.dumps(request))
-        code, output = self.run_op(path)
+        with self.assertRaises(op_spec.OpSpecError):
+            self.run_op(path)
+        original = op_runner.invoke_cog
+        def bad_prior(cog_dir, task, request_path, *args, **kwargs):
+            doc = json.loads(Path(request_path).read_text())
+            if 'prior_counts' in doc:
+                doc['prior_counts'] = {'x': -1}
+                Path(request_path).write_text(json.dumps(doc))
+            return original(cog_dir, task, request_path, *args, **kwargs)
+        with patch.object(op_runner, 'invoke_cog', side_effect=bad_prior):
+            code, output = self.run_op()
         self.assertEqual(code, 1, output)
         track = json.loads(Path(output['track']).read_text())
-        self.assertEqual(track['failed_step'], 'merge')
-        self.assertEqual([s['status'] for s in track['steps']], ['failed', 'not-reached'])
-        self.assertTrue(track['steps'][0]['problems'])
+        self.assertEqual(track['failed_step'], 'handoff')
+        self.assertEqual([s['status'] for s in track['steps']], ['passed', 'failed'])
+        self.assertTrue(track['steps'][1]['problems'])
 
     def test_resume_keeps_passed_work(self):
         original = op_runner.invoke_cog

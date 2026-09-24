@@ -1,91 +1,73 @@
 schema: openteams/op-manifest [0.1]
 id: openteams/op-builder-smoke
-version: 0.1.0
+version: 0.2.0
 name: Builder execution smoke check
-description: Model-free verification of shared Op execution and mapped Cog handoffs. This
-  is not the cog-builder workflow. The second merge deliberately treats the first findings
-  as a single new detector answer; original provenance remains in the first output.
+description: Model-free verification of shared Op execution and mapped Cog handoffs
+  using a Cog the builder itself produced. This is not the cog-builder workflow. The
+  second tally receives the first tally's counts as its prior counts, so the handoff
+  is a real data dependency between two invocations of one code Cog.
 inputs:
-- name: bundle
-  description: Synthetic detector bundle
+- name: first_texts
+  description: Texts for the first tally.
   required: true
-  default:
-    kind: dependency
-    batches:
-    - batch_id: b1
-      item_ids:
-      - A
-      - B
-      cuts:
-      - item_id: A
-        field: body
-        mid_sentence: true
-    results:
-    - - abstained: false
-        findings:
-        - finding_id: d1
-          blocking_item_id: A
-          blocked_item_id: B
-          basis: stated
-          citation: B needs A
-          inference_rationale: null
-      - abstained: false
-        findings:
-        - finding_id: d2
-          blocking_item_id: A
-          blocked_item_id: B
-          basis: inferred
-          citation: null
-          inference_rationale: A supplies the prerequisite
   schema:
-    type: object
+    type: array
+    minItems: 1
+    items:
+      type: string
+  default:
+  - "The Op layer sequences Cogs; the Gate decides, never the Cog."
+  - "Don't re-run passed work: a resume finishes a run."
+- name: second_texts
+  description: Texts for the second tally, accumulated onto the first tally's counts.
+  required: true
+  schema:
+    type: array
+    minItems: 1
+    items:
+      type: string
+  default:
+  - "The Cog reports; the Gate decides. 42 steps, 1 Track."
 steps:
-- id: merge
-  name: Merge synthetic detector repeats
+- id: tally
+  name: Tally the first texts
   cog:
-    id: openteams/cog-merge-findings-candidate
+    id: openteams/cog-word-tally
     version: 0.1.0
-    source: ../cog-merge-findings-candidate
+    source: ../cog-word-tally
     task: run
   input:
-    $from: inputs.bundle
-  expected_outcome: Findings and provenance with a passing envelope Gate.
+    texts:
+      $from: inputs.first_texts
+  expected_outcome: Word counts and a total with a passing envelope Gate.
   gate:
     policy: envelope-ok-no-error-problems
     guards: []
   on_fail: stop
 - id: handoff
-  name: Exercise the mapped Cog handoff
+  name: Accumulate the second texts onto the first tally
   depends_on:
-  - merge
+  - tally
   cog:
-    id: openteams/cog-merge-findings-candidate
+    id: openteams/cog-word-tally
     version: 0.1.0
-    source: ../cog-merge-findings-candidate
+    source: ../cog-word-tally
     task: run
   input:
-    kind:
-      $from: inputs.bundle.kind
-    batches:
-    - batch_id: handoff
-      item_ids:
-      - A
-      - B
-    results:
-    - - abstained:
-          $from: steps.merge.payload.abstained
-        findings:
-          $from: steps.merge.payload.findings
-  expected_outcome: Same synthetic relationship after a schema-shaped handoff; provenance
-    now describes the new single input.
+    texts:
+      $from: inputs.second_texts
+    prior_counts:
+      $from: steps.tally.payload.counts
+  expected_outcome: The first tally's counts preserved and increased by the second
+    texts; total_words is the sum of both.
   gate:
     policy: envelope-ok-no-error-problems
     guards: []
   on_fail: stop
 outputs:
-  original_merge:
-    $from: steps.merge.payload
-  handoff_merge:
+  first_tally:
+    $from: steps.tally.payload
+  accumulated_tally:
     $from: steps.handoff.payload
 track:
   records:
